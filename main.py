@@ -2,26 +2,23 @@ import asyncio
 from aiogram import Bot, Dispatcher
 import config
 
-# Импортируем движок базы данных для автоматического создания таблиц
-from db.base import engine
-from db.models import Base
-
-# Импортируем роутеры из наших модулей
+# Импортируем всё необходимое из пакета db, чтобы Python гарантированно прочитал модели
+from db import engine, Base
 from handlers import common, shopping, store_alerts
 
 
 async def main():
-    # Автоматически создаем все таблицы в новом файле БД при старте
+    # Накатываем структуру таблиц прямо в файл БД перед запуском бота
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 
     bot = Bot(token=config.BOT_TOKEN)
     dp = Dispatcher()
 
-    # Подключаем роутеры в диспетчер
+    # Регистрируем роутеры в диспетчере
     dp.include_routers(common.router, store_alerts.router, shopping.router)
 
-    print("Архитектурно оптимизированный семейный бот запущен!")
+    print("Профессиональный семейный бот на паттерне Repository успешно запущен!")
     await dp.start_polling(bot)
 
 

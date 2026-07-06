@@ -9,7 +9,7 @@ from aiogram.filters import Command
 from aiogram.exceptions import TelegramBadRequest
 from sqlalchemy import select, delete
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
-from datetime import datetime, timedelta
+from datetime import datetime
 
 from db.base import async_session
 from db.models import ShoppingItem, ChatSetting
@@ -20,11 +20,18 @@ router = Router()
 # === ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ БАЗЫ ДАННЫХ ===
 
 
-async def add_to_db(chat_id: int, text: str, amount: str | None, date_str: str):
+# Добавили параметр user_name в функцию сохранения
+async def add_to_db(
+    chat_id: int, text: str, amount: str | None, date_str: str, user_name: str
+):
     async with async_session() as session:
         async with session.begin():
             new_item = ShoppingItem(
-                chat_id=chat_id, product_text=text, amount=amount, add_date=date_str
+                chat_id=chat_id,
+                product_text=text,
+                amount=amount,
+                add_date=date_str,
+                user_name=user_name,  # Сохраняем имя
             )
             session.add(new_item)
 
@@ -95,23 +102,31 @@ async def get_shopping_keyboard(chat_id: int) -> InlineKeyboardMarkup:
 
     for item in products:
         status_icon = "✅" if item.bought else "⬜️"
-        btn_text = (
-            f"{status_icon} {item.product_text} ({item.amount}) — {item.add_date}"
-            if item.amount
-            else f"{status_icon} {item.product_text} — {item.add_date}"
-        )
+        amount_part = f" ({item.amount})" if item.amount else ""
+        author_part = item.user_name if item.user_name else "Семья"
 
+        # Собираем красивую информативную строку без всяких \n
+        # Теперь места вагон, всё влезет в одну строку на любом экране!
+        btn_text = f"{status_icon} {item.product_text}{amount_part} — 🗓 {item.add_date} 👤 {author_part}"
+
+        # Кнопка переключения статуса (купил/не купил) на всю ширину
         toggle_button = InlineKeyboardButton(
             text=btn_text, callback_data=f"db_toggle_{item.id}"
         )
-        delete_button = InlineKeyboardButton(
-            text="❌", callback_data=f"db_delete_{item.id}"
-        )
-        keyboard_rows.append([toggle_button, delete_button])
+        keyboard_rows.append([toggle_button])
 
+        # Если товар ПОМЕЧЕН КАК КУПЛЕННЫЙ (✅), добавляем под него маленькую кнопку окончательного удаления
+        if item.bought:
+            delete_button = InlineKeyboardButton(
+                text=f"🗑 Удалить навсегда: {item.product_text}",
+                callback_data=f"db_delete_{item.id}",
+            )
+            keyboard_rows.append([delete_button])
+
+    # Нижняя панель управления
     if products:
         clear_btn = InlineKeyboardButton(
-            text="🗑 Очистить купленное", callback_data="db_clear_bought"
+            text="🗑 Очистить все купленные", callback_data="db_clear_bought"
         )
         store_btn = InlineKeyboardButton(
             text="🏃‍♂️ Я в магазине!", callback_data="db_at_store"
@@ -208,10 +223,14 @@ async def add_products(message: Message, bot):
     incoming_items = [item.strip() for item in clean_text.split(",") if item.strip()]
     current_time = datetime.now().strftime("%d.%m %H:%M")
 
+    # Извлекаем имя пользователя, который отправил сообщение
+    user_name = message.from_user.first_name or "Инкогнито"
+
     for raw_item in incoming_items:
         product_name, amount = parse_item_and_amount(raw_item)
         if product_name:
-            await add_to_db(chat_id, product_name, amount, current_time)
+            # Передаем имя в базу данных
+            await add_to_db(chat_id, product_name, amount, current_time, user_name)
 
     try:
         await message.delete()

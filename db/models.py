@@ -12,6 +12,9 @@ class ShoppingItem(Base):
     amount: Mapped[str | None] = mapped_column(String(50), nullable=True)
     bought: Mapped[int] = mapped_column(default=0)
     add_date: Mapped[str] = mapped_column(String(50))
+    user_name: Mapped[str | None] = mapped_column(
+        String(100), nullable=True
+    )  # Проверь эту строчку
 
 
 class ChatSetting(Base):

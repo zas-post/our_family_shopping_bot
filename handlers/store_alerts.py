@@ -33,7 +33,7 @@ async def user_at_store_notification(callback: CallbackQuery):
 
     await callback.message.answer(
         f"🚨 **ВНИМАНИЕ ВСЕМ ДОМА!** 🚨\n\n"
-        f"🏃‍♂️ **{user_name}** уже зашел в магазин!\n"
+        f"🏃‍♂️ **{user_name}** уже в магазин!\n"
         f"⏳ Если нужно что-то добавить — **срочно пишите через 'п+' прямо сейчас!**\n"
         f"Через 5 минут список будет заморожен."
     )

@@ -1,17 +1,18 @@
-# Используем легковесный образ Python на базе Alpine Linux
 FROM python:3.12-alpine
 
-# Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
 
-# Копируем файл зависимостей
+# Устанавливаем системные зависимости для сборки пакетов (компиляторы для SQLAlchemy)
+RUN apk add --no-cache gcc musl-dev python3-dev libffi-dev openssl-dev build-base
+
+# Копируем зависимости
 COPY requirements.txt .
 
-# Устанавливаем зависимости (флаг --no-cache-dir экономит место)
+# Устанавливаем библиотеки Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем все остальные файлы проекта в контейнер
+# Копируем весь остальной код проекта
 COPY . .
 
-# Команда для запуска бота при старте контейнера
+# Команда запуска
 CMD ["python", "main.py"]

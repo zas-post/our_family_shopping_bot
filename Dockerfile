@@ -1,22 +1,18 @@
-# Используем легковесный образ Python на базе Alpine Linux
 FROM python:3.12-alpine
 
-# Устанавливаем системные зависимости, необходимые для сборки некоторых Python-пакетов
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
-# Устанавливаем рабочую директорию внутри контейнера
 WORKDIR /app
 
-# Копируем файл зависимостей
+# Устанавливаем системные зависимости для сборки пакетов (компиляторы для SQLAlchemy)
+RUN apk add --no-cache gcc musl-dev python3-dev libffi-dev openssl-dev build-base
+
+# Копируем зависимости
 COPY requirements.txt .
 
-# Устанавливаем зависимости прямо в систему контейнера (виртуальное окружение внутри Docker не требуется)
+# Устанавливаем библиотеки Python
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Копируем все остальные файлы проекта в контейнер
+# Копируем весь остальной код проекта
 COPY . .
 
-# Команда для запуска бота при старте контейнера
+# Команда запуска
 CMD ["python", "main.py"]

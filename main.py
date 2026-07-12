@@ -40,7 +40,7 @@ class ShoppingRepository:
     def init_db(self):
         with sqlite3.connect(self.db_path) as conn:
             conn.execute("""
-                CREATE TABLE IF NOT EXISTS shopping_list (
+                CREATE TABLE IF NOT NULL shopping_list (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     item_name TEXT NOT EXISTS,
                     user_name TEXT

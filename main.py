@@ -1,81 +1,139 @@
 import asyncio
 import logging
 import sys
+import sqlite3
+from os import getenv
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart, Command
 from aiogram.types import Message
-from os import getenv
 
 # =====================================================================
-# НАСТРОЙКА НАСТОЯЩИХ ЖИВЫХ ЛОГОВ (Для Dozzle)
+# НАСТРОЙКА ЛОГОВ (Для Dozzle — без спама в Телеграм)
 # =====================================================================
 logging.basicConfig(
-    level=logging.INFO,  # Уровень INFO позволяет видеть всё: от старта до кликов
+    level=logging.INFO,
     format="%(asctime)s - [%(levelname)s] - %(name)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],  # Направляем логи прямо в Docker
+    handlers=[logging.StreamHandler(sys.stdout)],
 )
 logger = logging.getLogger("ShoppingBot")
 
-# Загружаем токен из .env файла, который проброшен через Docker
 BOT_TOKEN = getenv("BOT_TOKEN")
-
 if not BOT_TOKEN:
-    logger.critical("Бот не запущен: Переменная BOT_TOKEN не найдена в файле .env!")
+    logger.critical("Переменная BOT_TOKEN не найдена в .env!")
     sys.exit(1)
 
-# Инициализируем бота и диспетчер
+# ТУТ ИСПРАВЛЕНО: parse_mode написан правильно через подчеркивание
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
+
 # =====================================================================
-# ХЕНДЛЕРЫ (ОБРАБОТКА КОМАНД И ДЕЙСТВИЙ)
+# СЛОЙ С УПРАВЛЕНИЕМ БД (Паттерн Repository)
+# =====================================================================
+class ShoppingRepository:
+    def __init__(self, db_path="shopping_bot.db"):
+        self.db_path = db_path
+        self.init_db()
+
+    def init_db(self):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS shopping_list (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    item_name TEXT NOT EXISTS,
+                    user_name TEXT
+                )
+            """)
+            conn.commit()
+
+    def add_item(self, item_name, user_name):
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                "INSERT INTO shopping_list (item_name, user_name) VALUES (?, ?)",
+                (item_name, user_name),
+            )
+            conn.commit()
+
+    def get_all_items(self):
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT id, item_name, user_name FROM shopping_list")
+            return cursor.fetchall()
+
+
+repo = ShoppingRepository()
+
+
+# =====================================================================
+# ФУНКЦИЯ ГЕНЕРАЦИИ ТАБЛИЦЫ СПИСКА
+# =====================================================================
+def generate_shopping_table():
+    items = repo.get_all_items()
+    if not items:
+        return "🛒 Список покупок пуст."
+
+    table = f"{html.bold('📋 ТЕКУЩИЙ СПИСОК ПОКУПОК:')}\n"
+    table += "<code>" + "—" * 30 + "</code>\n"
+
+    for idx, item, user in items:
+        table += f"🔹 {html.code(item)} (добавил: {user})\n"
+
+    table += "<code>" + "—" * 30 + "</code>"
+    return table
+
+
+# =====================================================================
+# ХЕНДЛЕРЫ БОТА
 # =====================================================================
 
 
-# 1. Обработка команды /start
 @dp.message(CommandStart())
-async def command_start_handler(message: Message) -> None:
+async def cmd_start(message: Message):
     user_name = message.from_user.full_name
-    user_id = message.from_user.id
-
-    # Этот лог МГНОВЕННО отобразится в Dozzle со всеми данными!
-    logger.info(
-        f"Пользователь {user_name} (ID: {user_id}) запустил бота командой /start"
-    )
-
+    logger.info(f"Пользователь {user_name} запустил бота")
     await message.answer(
-        f"Привет, {html.bold(user_name)}! Я твой профессиональный семейный помощник для покупок. Напиши, что нужно купить."
+        f"Привет, {user_name}! Используй команду {html.bold('п+ название')} для добавления товара."
     )
 
 
-# 2. Пример обработки добавления товара (команда /add или любой текст)
+# Обработка добавления через "п+"
 @dp.message()
-async def add_item_handler(message: Message) -> None:
-    item_text = message.text
+async def handle_message(message: Message):
+    text = message.text.strip()
     user_name = message.from_user.full_name
 
-    # 💥 ВОТ ЗДЕСЬ ПРОИСХОДИТ МАГИЯ ЛОГИРОВАНИЯ ДЕЙСТВИЙ:
-    logger.info(f"Пользователь {user_name} добавил в список покупок: '{item_text}'")
+    if text.lower().startswith("п+"):
+        # Отрезаем "п+" и получаем чистое название продукта
+        product = text[2:].strip()
 
-    # Тут будет твоя логика сохранения в базу данных shopping_bot.db
-    # Сделай запись в репозиторий...
+        if not product:
+            await message.reply("❌ Укажите название продукта после 'п+'")
+            return
 
-    await message.reply(f"📌 Добавлено в корзину: {html.code(item_text)}")
+        # Сохраняем в базу данных через репозиторий
+        repo.add_item(product, user_name)
+
+        # Отправляем лог в Dozzle
+        logger.info(f"Пользователь {user_name} успешно добавил: '{product}'")
+
+        # Выводим в Телеграм обновленную таблицу со списком
+        table_output = generate_shopping_table()
+        await message.answer(table_output)
+    else:
+        # Если это не команда добавления, просто выводим текущую таблицу
+        table_output = generate_shopping_table()
+        await message.answer(table_output)
 
 
 # =====================================================================
-# ЗАПУСК БОТА
+# ЗАПУСК
 # =====================================================================
-async def main() -> None:
+async def main():
     logger.info("Профессиональный семейный бот на паттерне Repository успешно запущен!")
-    try:
-        await dp.start_polling(bot)
-    except Exception as e:
-        logger.error(f"Критическая ошибка при работе бота: {e}", exc_info=True)
+    await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    # Запуск асинхронного движка
     asyncio.run(main())

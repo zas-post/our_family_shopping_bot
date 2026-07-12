@@ -6,11 +6,11 @@ from os import getenv
 from aiogram import Bot, Dispatcher, html
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart, Command
+from aiogram.filters import CommandStart
 from aiogram.types import Message
 
 # =====================================================================
-# НАСТРОЙКА ЛОГОВ (Для Dozzle — без спама в Телеграм)
+# НАСТРОЙКА ЛОГОВ (Для Dozzle — вывод строго в stdout)
 # =====================================================================
 logging.basicConfig(
     level=logging.INFO,
@@ -24,7 +24,7 @@ if not BOT_TOKEN:
     logger.critical("Переменная BOT_TOKEN не найдена в .env!")
     sys.exit(1)
 
-# ТУТ ИСПРАВЛЕНО: parse_mode написан правильно через подчеркивание
+# parse_mode указан правильно
 bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
@@ -39,10 +39,11 @@ class ShoppingRepository:
 
     def init_db(self):
         with sqlite3.connect(self.db_path) as conn:
+            # ИСПРАВЛЕНО: Правильный чистый синтаксис SQLite без лишних слов
             conn.execute("""
-                CREATE TABLE IF NOT NULL shopping_list (
+                CREATE TABLE IF NOT EXISTS shopping_list (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    item_name TEXT NOT EXISTS,
+                    item_name TEXT NOT NULL,
                     user_name TEXT
                 )
             """)
@@ -98,37 +99,36 @@ async def cmd_start(message: Message):
     )
 
 
-# Обработка добавления через "п+"
+# Обработка добавления через "п+" или вывод текущего списка
 @dp.message()
 async def handle_message(message: Message):
     text = message.text.strip()
     user_name = message.from_user.full_name
 
     if text.lower().startswith("п+"):
-        # Отрезаем "п+" и получаем чистое название продукта
         product = text[2:].strip()
 
         if not product:
             await message.reply("❌ Укажите название продукта после 'п+'")
             return
 
-        # Сохраняем в базу данных через репозиторий
+        # Сохраняем в базу через паттерн Repository
         repo.add_item(product, user_name)
 
-        # Отправляем лог в Dozzle
-        logger.info(f"Пользователь {user_name} успешно добавил: '{product}'")
+        # Лог идет строго в Dozzle
+        logger.info(f"Пользователь {user_name} добавил: '{product}'")
 
-        # Выводим в Телеграм обновленную таблицу со списком
+        # В телеграм отправляем красивую таблицу со списком
         table_output = generate_shopping_table()
         await message.answer(table_output)
     else:
-        # Если это не команда добавления, просто выводим текущую таблицу
+        # При любом другом сообщении просто показываем актуальную таблицу
         table_output = generate_shopping_table()
         await message.answer(table_output)
 
 
 # =====================================================================
-# ЗАПУСК
+# ЗАПУСК БОТА
 # =====================================================================
 async def main():
     logger.info("Профессиональный семейный бот на паттерне Repository успешно запущен!")

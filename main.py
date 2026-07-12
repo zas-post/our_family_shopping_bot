@@ -26,7 +26,7 @@ if not BOT_TOKEN:
     sys.exit(1)
 
 # Инициализируем бота и диспетчер
-bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parseMode=ParseMode.HTML))
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 
 # =====================================================================

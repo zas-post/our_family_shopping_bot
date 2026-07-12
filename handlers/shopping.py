@@ -1,3 +1,4 @@
+import logging
 from aiogram import Router, F
 from aiogram.types import (
     Message,
@@ -13,6 +14,7 @@ from db.repository import ShoppingRepository
 from utils.parser import parse_item_and_amount
 
 router = Router()
+logger = logging.getLogger("ShoppingBot.Shopping")
 
 # === КЛАВИАТУРА И ОБНОВЛЕНИЕ СПИСКА ===
 
@@ -111,6 +113,9 @@ async def send_or_update_list(chat_id: int, bot, target_message: Message = None)
 
 @router.message(Command("list", "pin"))
 async def cmd_list(message: Message, bot):
+    logger.info(
+        f"📋 Пользователь {message.from_user.first_name} запросил перевывод списка покупок в чате {message.chat.id}"
+    )
     settings = await ShoppingRepository.get_chat_settings(message.chat.id)
     old_msg_id = settings.last_list_message_id if settings else None
     if old_msg_id:
@@ -145,6 +150,11 @@ async def add_products(message: Message, bot):
             await ShoppingRepository.add_item(
                 chat_id, product_name, amount, current_time, user_name
             )
+            # 🌟 Красивый лог добавления товара
+            logger.info(
+                f"🛒 ДОБАВЛЕН: '{product_name}' (кол-во: {amount or 'не указано'}) "
+                f"пользователем {user_name} в чате {chat_id}"
+            )
 
     try:
         await message.delete()
@@ -156,11 +166,20 @@ async def add_products(message: Message, bot):
 
 @router.callback_query(F.data.startswith("db_toggle_"))
 async def toggle_product_status(callback: CallbackQuery):
+    chat_id = callback.message.chat.id
     product_id = int(callback.data.split("_")[2])
+    user_name = callback.from_user.first_name
+
     await ShoppingRepository.toggle_item_status(product_id)
+
+    # 🌟 Логируем факт переключения статуса
+    logger.info(
+        f"🔄 ИЗМЕНЕН СТАТУС: Товар ID {product_id} переключен пользователем {user_name} в чате {chat_id}"
+    )
+
     try:
         await callback.message.edit_reply_markup(
-            reply_markup=await get_shopping_keyboard(callback.message.chat.id)
+            reply_markup=await get_shopping_keyboard(chat_id)
         )
     except TelegramBadRequest:
         pass
@@ -171,8 +190,15 @@ async def toggle_product_status(callback: CallbackQuery):
 async def delete_product(callback: CallbackQuery, bot):
     chat_id = callback.message.chat.id
     product_id = int(callback.data.split("_")[2])
+    user_name = callback.from_user.first_name
 
     await ShoppingRepository.delete_item(product_id)
+
+    # 🌟 Логируем удаление
+    logger.info(
+        f"🗑 УДАЛЕН НАВСЕГДА: Товар ID {product_id} удален пользователем {user_name} в чате {chat_id}"
+    )
+
     await send_or_update_list(chat_id, bot)
     await callback.answer("Товар удален")
 
@@ -180,11 +206,18 @@ async def delete_product(callback: CallbackQuery, bot):
 @router.callback_query(F.data == "db_clear_bought")
 async def clear_bought_items(callback: CallbackQuery, bot):
     chat_id = callback.message.chat.id
+    user_name = callback.from_user.first_name
+
     deleted_rows = await ShoppingRepository.clear_bought_items(chat_id)
 
     if deleted_rows == 0:
         await callback.answer("Нет купленных товаров для удаления!", show_alert=True)
         return
+
+    # 🌟 Логируем очистку списка
+    logger.info(
+        f"🧹 ОЧИСТКА: Пользователь {user_name} удалил все купленные товары ({deleted_rows} шт.) в чате {chat_id}"
+    )
 
     await send_or_update_list(chat_id, bot)
     await callback.answer("Купленные товары удалены")

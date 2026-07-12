@@ -36,7 +36,7 @@ async def user_at_store_notification(callback: CallbackQuery):
         chat_id, now.strftime("%Y-%m-%d %H:%M:%S")
     )
 
-    # 🌟 Логируем отправку важного алерта всей семье
+    # Логируем отправку важного алерта всей семье
     logger.info(
         f"🚨 АЛЕРТ: Пользователь {user_name} сообщил, что он в магазине! Чат: {chat_id}"
     )
